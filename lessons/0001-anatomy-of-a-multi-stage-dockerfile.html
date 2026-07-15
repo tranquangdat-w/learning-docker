@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 0001 — Anatomy of a Multi-Stage Dockerfile</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<h1>Anatomy of a Multi-Stage Dockerfile</h1>
+<p class="subtitle">Lesson 0001 · the three structural moves you must recognize before you can write one</p>
+
+<p>You already understand the <em>why</em> (smaller, safer images) and the build mechanics
+(<a href="../GLOSSARY.md">build context</a>, <code>RUN</code> in-container, <code>COPY</code>). This lesson
+compresses a multi-stage Dockerfile into <strong>three moves</strong> you can spot, name, and later write yourself.</p>
+
+<h2>Move 1 — Multiple <code>FROM</code> lines, each named</h2>
+
+<p>Every <code>FROM</code> starts a new, isolated <a href="../GLOSSARY.md">stage</a>. Name a stage with
+<code>AS &lt;name&gt;</code> so later stages can reference it. A builder stage is usually fat; the final stage is usually tiny.</p>
+
+<div class="stage-box">
+<span class="label">FROM golang:1.23-alpine AS base</span>
+<p style="margin:0.4rem 0 0">A heavy image with the compiler. Named <code>base</code> so others can reuse it.</p>
+</div>
+
+<h2>Move 2 — <code>COPY --from</code> carries artifacts forward</h2>
+
+<p>The final stage does <strong>not</strong> rebuild. It starts from a minimal
+<a href="../GLOSSARY.md">base image</a> (or <code>scratch</code>) and copies only the finished binary out of the
+builder with <code>COPY --from=&lt;stage&gt;</code>. Anything not copied — compiler, source, caches — stays behind.</p>
+
+<div class="stage-box">
+<span class="label">COPY --from=build-server /bin/server /bin/</span>
+<p style="margin:0.4rem 0 0">"Take the binary from the <code>build-server</code> stage and drop it here."</p>
+</div>
+
+<h2>Move 3 — The last stage is the shipped image</h2>
+
+<p>Docker builds <em>every</em> stage but only the <strong>last</strong> stage becomes the image you push. Earlier
+stages contribute only what a later stage explicitly copies. Use <code>docker build --target &lt;name&gt;</code> to
+stop at any named stage (handy for a <code>test</code> or <code>builder</code> stage in CI).</p>
+
+<div class="callout">
+<p><strong>One-line mental model:</strong> fat builder → <code>COPY --from</code> the artifact → tiny final stage → that's the image.</p>
+</div>
+
+<h2>Check yourself</h2>
+
+<div class="quiz" id="quiz">
+  <div class="q">1 · Which stage becomes the final shipped image?</div>
+  <ul>
+    <li><button data-correct="true">The last stage in the Dockerfile</button></li>
+    <li><button>The first stage in the Dockerfile</button></li>
+    <li><button>All of the stages combined</button></li>
+    <li><button>The builder stage is always</button></li>
+  </ul>
+  <div class="feedback" id="f1"></div>
+
+  <div class="q" style="margin-top:1.4rem">2 · What does <code>COPY --from=builder</code> do?</div>
+  <ul>
+    <li><button data-correct="true">Copies files from the builder stage</button></li>
+    <li><button>Copies files from the host machine</button></li>
+    <li><button>Renames the builder stage to final</button></li>
+    <li><button>Runs a command in builder stage</button></li>
+  </ul>
+  <div class="feedback" id="f2"></div>
+
+  <div class="q" style="margin-top:1.4rem">3 · Where does a <code>RUN</code> instruction execute?</div>
+  <ul>
+    <li><button data-correct="true">Inside the container being built</button></li>
+    <li><button>On your host machine directly</button></li>
+    <li><button>Inside the Docker daemon only</button></li>
+    <li><button>In a separate remote server</button></li>
+  </ul>
+  <div class="feedback" id="f3"></div>
+
+  <div class="q" style="margin-top:1.4rem">4 · What is the build context?</div>
+  <ul>
+    <li><button data-correct="true">The directory passed to docker build</button></li>
+    <li><button>The final image that gets shipped</button></li>
+    <li><button>A stage that builds the project</button></li>
+    <li><button>The cache of all built layers</button></li>
+  </ul>
+  <div class="feedback" id="f4"></div>
+</div>
+
+<h2>Primary source</h2>
+<p>Read the canonical reference next:
+<a href="https://docs.docker.com/build/building/multi-stage/" target="_blank" rel="noopener">Docker Docs — Multi-stage builds</a>.
+It confirms the exact <code>FROM ... AS</code> / <code>COPY --from</code> syntax and the default-last-stage rule.</p>
+
+<hr>
+<p class="callout"><strong>Your teacher is available.</strong> If any part of this lesson is unclear — a term, a move,
+or the quiz — ask the agent follow-up questions. It can re-explain anything, token by token.</p>
+
+<p class="meta">Part of the multi-stage Docker course · see <a href="../MISSION.md">MISSION.md</a> and
+<a href="../GLOSSARY.md">GLOSSARY.md</a></p>
+
+<script>
+document.querySelectorAll('#quiz .q').forEach(function(qEl, i){
+  var fb = document.getElementById('f' + (i+1));
+  qEl.nextElementSibling.querySelectorAll('button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var siblings = btn.parentElement.querySelectorAll('button');
+      siblings.forEach(function(b){ b.disabled = true; });
+      if (btn.dataset.correct === 'true') {
+        btn.classList.add('correct');
+        fb.textContent = 'Correct.';
+        fb.className = 'feedback ok';
+      } else {
+        btn.classList.add('wrong');
+        var right = btn.parentElement.querySelector('[data-correct="true"]');
+        right.classList.add('correct');
+        fb.textContent = 'Not quite — see the highlighted answer.';
+        fb.className = 'feedback no';
+      }
+    });
+  });
+});
+</script>
+
+</main>
+</body>
+</html>

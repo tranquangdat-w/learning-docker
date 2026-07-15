@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 0002 — Write Your First Multi-Stage Dockerfile</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<h1>Write Your First Multi-Stage Dockerfile</h1>
+<p class="subtitle">Lesson 0002 · you are given a Node app &mdash; you write the Dockerfile</p>
+
+<h2>The scenario</h2>
+<p>You have a simple Express server in <code>exercises/node-express/</code>:</p>
+
+<pre>const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.json({ message: 'Hello from Node!' });
+});
+
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});</pre>
+
+<p>It has one dependency: <code>express</code>. Right now the <code>node_modules</code> don't exist &mdash; they get created when you <code>npm install</code>.</p>
+
+<h2>Your task</h2>
+<p>Write a <code>Dockerfile</code> in <code>exercises/node-express/</code> with <strong>two stages</strong>:</p>
+
+<div class="stage-box">
+<strong>Stage 1 &mdash; <code>deps</code></strong>
+<p style="margin:0.2rem 0">Base: <code>node:20-alpine</code>. Copy <code>package.json</code>, install <em>only</em> production dependencies (<code>npm ci --only=production</code>), then clean the npm cache.</p>
+</div>
+
+<div class="stage-box">
+<strong>Stage 2 &mdash; <code>release</code></strong>
+<p style="margin:0.2rem 0">Base: <code>node:20-alpine</code>. Copy <code>node_modules</code> from <code>deps</code>, then copy <code>server.js</code>. Expose port 3000 and run with <code>node server.js</code>.</p>
+</div>
+
+<h2>Hints</h2>
+<ul>
+  <li>Every stage starts with <code>FROM</code>. You need two.</li>
+  <li>Name the first stage with <code>AS deps</code> so the second can reference it.</li>
+  <li><code>npm cache clean --force</code> keeps cache out of the image layer.</li>
+  <li>The final stage copies <em>only</em> the two things it needs: <code>node_modules</code> and the source file.</li>
+</ul>
+
+<h2>Solution</h2>
+<details>
+<summary>Reveal after you&rsquo;ve tried it</summary>
+<pre>FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json ./
+RUN npm ci --only=production && npm cache clean --force
+
+FROM node:20-alpine AS release
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY server.js ./
+EXPOSE 3000
+CMD ["node", "server.js"]</pre>
+
+<div class="callout">
+<strong>Why two stages even though both use the same base image?</strong>
+The <code>deps</code> stage builds <code>node_modules</code> and then discards the npm cache and any temporary install files. The <code>release</code> stage gets a <em>clean</em> <code>node_modules</code> without the install debris. On a real project with devDependencies (TypeScript, webpack), the second stage wouldn't even need those installed &mdash; only what <code>COPY --from</code> brings in.
+</div>
+</details>
+
+<h2>Primary source</h2>
+<p>Docker&rsquo;s own best-practices guide for Node:
+<a href="https://docs.docker.com/guide/nodejs/" target="_blank" rel="noopener">docs.docker.com/guide/nodejs</a>.
+It shows a similar two-stage pattern for a real Node service.</p>
+
+<hr>
+<p class="callout"><strong>Your teacher is available.</strong> Try writing the Dockerfile in the terminal with the agent guiding you. If you get stuck, ask it to show the next line or explain why a pattern works.</p>
+
+<p class="meta">Lesson 0002 &middot; <a href="../GLOSSARY.md">GLOSSARY.md</a> &middot; <a href="../MISSION.md">MISSION.md</a></p>
+
+</main>
+</body>
+</html>
