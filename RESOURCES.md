@@ -15,6 +15,17 @@
 - [Book: _Docker Deep Dive_ — Nigel Poulton](https://www.nigelpoulton.com/books/docker-deep-dive/)
   Highly regarded foundational text. Use for: base images, image layers, and the build cache mental model.
 
+## Knowledge — Buildx, BuildKit & multi-arch
+
+- [Docker Docs: Creating and managing builders](https://docs.docker.com/build/builders/manage/)
+  Canonical reference for `docker buildx create/ls/inspect/rm`. Use for: exact flags when setting up a local builder.
+- [Docker Docs: Multi-platform builds](https://docs.docker.com/build/building/multi-platform/)
+  Explains why the default `docker` driver can't build multi-platform images, and how `--platform` works. Use for: the core "why do I need a new builder" motivation.
+- [Docker Docs: docker-container driver](https://docs.docker.com/build/builders/drivers/docker-container/)
+  The driver used for local multi-arch builders — runs BuildKit in a dedicated container, supports QEMU emulation. Use for: `--driver-opt` flags and how builder state/cache is stored.
+- [Docker Docs: BuildKit](https://docs.docker.com/build/buildkit/)
+  Background on the BuildKit engine buildx talks to, and its cache model (layer cache, cache invalidation on the first changed instruction).
+
 ## Wisdom (Communities)
 
 - [Docker Community Slack (#buildkit channel)](https://dockr.ly/comm-slack)

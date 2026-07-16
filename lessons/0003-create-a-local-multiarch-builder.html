@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 0003 — Create a Local Builder for Multi-Architecture Builds</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<h1>Create a Local Builder for Multi-Architecture Builds</h1>
+<p class="subtitle">Lesson 0003 &middot; your default builder can't do this &mdash; you'll build one that can</p>
+
+<h2>The problem</h2>
+<p>Run this on your machine:</p>
+<pre>docker buildx ls</pre>
+<p>You'll see something like:</p>
+<pre>NAME/NODE     DRIVER/ENDPOINT   STATUS    BUILDKIT   PLATFORMS
+default*      docker
+ \_ default    \_ default       running   v0.31.0    linux/amd64 (+3)</pre>
+<p>That <code>default</code> builder uses the <code>docker</code> <strong>driver</strong> &mdash; the built-in BuildKit instance that ships inside the Docker Engine itself. Per Docker's own docs, this driver <a href="https://docs.docker.com/build/building/multi-platform/" target="_blank" rel="noopener">"only supports single-platform builds and lacks the infrastructure for managing manifest lists required by multi-architecture images."</a> The <code>(+3)</code> you see is just amd64 variants (v2, v3, 386) &mdash; not a second architecture.</p>
+<p>Try to build for two architectures at once with it, and it won't work. You need a different <strong>driver</strong>.</p>
+
+<h2>The fix: a <code>docker-container</code> builder</h2>
+<p>The <code>docker-container</code> driver runs BuildKit inside its own dedicated container, separate from the Docker Engine. That separate container is what knows how to fan a build out across architectures and assemble the result into a <strong>manifest list</strong> &mdash; one image reference that points to several architecture-specific variants.</p>
+<p>Create one:</p>
+<pre>docker buildx create --name multiarch --driver docker-container --bootstrap --use</pre>
+<div class="stage-box">
+<span class="label">--name multiarch</span>
+<p style="margin:0.2rem 0">What you'll call this builder in every later command. Pick anything; <code>docker buildx ls</code> will show it by this name.</p>
+</div>
+<div class="stage-box">
+<span class="label">--driver docker-container</span>
+<p style="margin:0.2rem 0">The one flag that actually matters here. Without it, buildx defaults to <code>docker-container</code> too when you omit the flag entirely &mdash; but naming it explicitly makes the choice visible, which matters while you're learning it.</p>
+</div>
+<div class="stage-box">
+<span class="label">--bootstrap</span>
+<p style="margin:0.2rem 0">Starts the BuildKit container immediately. Without it, the builder is only registered &mdash; it doesn't actually launch until your first build.</p>
+</div>
+<div class="stage-box">
+<span class="label">--use</span>
+<p style="margin:0.2rem 0">Makes <code>multiarch</code> the current default builder, so you don't need <code>--builder multiarch</code> on every command after this. (The lesson below still passes it explicitly, so each command is self-contained.)</p>
+</div>
+
+<h2>Verify it</h2>
+<pre>docker buildx ls</pre>
+<pre>NAME/NODE        DRIVER/ENDPOINT   STATUS    BUILDKIT   PLATFORMS
+multiarch*       docker-container
+ \_ multiarch0    \_ ...           running   v0.30.0    linux/amd64 (+3), linux/386
+default          docker
+ \_ default       \_ default       running   v0.31.0    linux/amd64 (+3)</pre>
+<div class="callout">
+<strong>Notice: no <code>arm64</code> in that platform list either.</strong> That list only shows what BuildKit can run <em>natively</em>. arm64 support comes from QEMU emulation, registered at the host kernel level (via <code>binfmt_misc</code>) &mdash; it doesn't show up in <code>buildx inspect</code>, but it's there and it works, as you're about to see.
+</div>
+
+<h2>The exercise: build your Node app for two architectures</h2>
+<p>You already wrote the Dockerfile for <code>exercises/node-express/</code> in Lesson 0002. It's a pure-JavaScript app with no native dependencies &mdash; the safest possible thing to build across architectures, since nothing needs to be compiled differently per-arch.</p>
+<p>Run:</p>
+<pre>docker buildx build --builder multiarch \
+  --platform linux/amd64,linux/arm64 \
+  -t local/node-express:multiarch \
+  ./exercises/node-express</pre>
+<p>Watch the output closely. You'll see <strong>every stage run twice</strong> &mdash; once tagged <code>[linux/amd64 ...]</code>, once <code>[linux/arm64 ...]</code>. The arm64 side is running under QEMU emulation: same instructions, translated CPU-instruction-by-instruction, which is why it's noticeably slower than the native amd64 side for anything CPU-bound (an <code>npm ci</code> or <code>RUN</code> compile step is where you'll feel it most).</p>
+<div class="callout">
+<strong>You'll see a warning at the end:</strong>
+<pre style="margin:0.4rem 0 0">WARNING: No output specified with docker-container driver. Build result will
+only remain in the build cache. To push result image into registry use --push
+or to load image into docker use --load</pre>
+<p>This is expected, not an error. The <code>docker-container</code> driver builds in its own separate container, so it never lands in your local <code>docker image ls</code> automatically &mdash; unlike the <code>docker</code> driver, which always does, with no flag needed (see the reference table below). You have to say explicitly where the result goes: <code>--load</code> (into your local Docker) or <code>--push</code> (to a registry).</p>
+</div>
+<div class="callout">
+<strong>Correction if you're re-reading this lesson:</strong> an earlier version of this lesson claimed a multi-platform result "can't be <code>--load</code>ed." That's wrong on this machine. Whether <code>--load</code> works for multi-platform depends on which local image store your Docker Engine uses:
+<ul style="margin:0.4rem 0">
+<li><strong>containerd image store</strong> (Docker Engine 29+/Docker Desktop default) &mdash; <code>--load</code> works for multi-platform. The result lands as one image entry containing every platform variant; run <code>docker image ls --tree</code> to see them broken out.</li>
+<li><strong>classic image store</strong> (older engines) &mdash; <code>--load</code> only accepts a single platform. A multi-platform <code>--load</code> fails outright; you'd need <code>--push</code> instead.</li>
+</ul>
+Check yours with <code>docker info --format '{{.DriverStatus}}'</code> &mdash; if it mentions <code>io.containerd.snapshotter.v1</code>, you're on containerd and <code>--load</code> just works. See <code>reference/builder-drivers.html</code> for the full table.
+</div>
+
+<h2>Solution recap</h2>
+<details>
+<summary>Reveal after you've run it yourself</summary>
+<pre># one-time setup
+docker buildx create --name multiarch --driver docker-container --bootstrap --use
+
+# build only (proves it works, nothing kept locally)
+docker buildx build --builder multiarch \
+  --platform linux/amd64,linux/arm64 \
+  -t local/node-express:multiarch \
+  ./exercises/node-express
+
+# build + keep it locally (needs containerd image store, see callout above)
+docker buildx build --builder multiarch \
+  --platform linux/amd64,linux/arm64 \
+  -t local/node-express:multiarch --load \
+  ./exercises/node-express
+
+docker image ls --tree   # see both platform variants under one entry</pre>
+<div class="callout">
+<strong>Why can <code>docker-container</code> do this and <code>docker</code> can't?</strong>
+The <code>docker</code> driver <em>is</em> the Docker Engine's own built-in BuildKit &mdash; one instance, tied to the host's single architecture, with no manifest-list assembly logic. The <code>docker-container</code> driver spins up a <em>separate</em> BuildKit instance in its own container, purpose-built to run a matrix of platform builds in parallel (native or emulated) and stitch the results into one multi-arch reference. It's a different, more capable engine &mdash; not a configuration flag on the same one.
+</div>
+</details>
+
+<h2>Primary source</h2>
+<p>Docker's own guide, which this lesson follows directly:
+<a href="https://docs.docker.com/build/building/multi-platform/" target="_blank" rel="noopener">docs.docker.com/build/building/multi-platform</a>.
+For the builder-management commands themselves (create/ls/inspect/rm), see
+<a href="https://docs.docker.com/build/builders/manage/" target="_blank" rel="noopener">docs.docker.com/build/builders/manage</a>.</p>
+
+<hr>
+<p class="callout"><strong>Your teacher is available.</strong> If the emulation slowdown, the manifest-list idea, or the <code>--push</code>/<code>--load</code> distinction isn't clicking, ask the agent to walk through it token-by-token &mdash; that's how the last two lessons went too.</p>
+
+<p class="meta">Lesson 0003 &middot; <a href="../GLOSSARY.md">GLOSSARY.md</a> &middot; <a href="../MISSION.md">MISSION.md</a></p>
+
+</main>
+</body>
+</html>

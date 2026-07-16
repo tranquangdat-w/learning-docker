@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reference — Builder Drivers &amp; Output Flags</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<h1>Builder Drivers &amp; Output Flags</h1>
+<p class="subtitle">Reference &middot; where does a build's result actually go?</p>
+
+<h2>The rule</h2>
+<div class="callout">
+<strong>The <code>docker</code> driver always auto-loads to <code>docker image ls</code>. Every other driver never does &mdash; you must say <code>--load</code> or <code>--push</code>, every time, single or multi-platform.</strong>
+</div>
+
+<table style="width:100%; border-collapse:collapse; margin:1.2rem 0; font-size:0.9em">
+<thead>
+<tr style="border-bottom:1px solid var(--rule); text-align:left">
+<th style="padding:0.4rem 0.6rem">Driver</th>
+<th style="padding:0.4rem 0.6rem">Runs where</th>
+<th style="padding:0.4rem 0.6rem">Auto-loads to <code>docker image ls</code>?</th>
+<th style="padding:0.4rem 0.6rem">Multi-platform builds?</th>
+</tr>
+</thead>
+<tbody>
+<tr style="border-bottom:1px solid var(--rule)">
+<td style="padding:0.4rem 0.6rem"><code>docker</code> (default)</td>
+<td style="padding:0.4rem 0.6rem">Inside the Docker Engine itself</td>
+<td style="padding:0.4rem 0.6rem">Yes, always</td>
+<td style="padding:0.4rem 0.6rem">No &mdash; single platform only</td>
+</tr>
+<tr style="border-bottom:1px solid var(--rule)">
+<td style="padding:0.4rem 0.6rem"><code>docker-container</code></td>
+<td style="padding:0.4rem 0.6rem">A separate BuildKit container</td>
+<td style="padding:0.4rem 0.6rem">No &mdash; needs <code>--load</code> or <code>--push</code></td>
+<td style="padding:0.4rem 0.6rem">Yes</td>
+</tr>
+<tr>
+<td style="padding:0.4rem 0.6rem"><code>remote</code>, <code>kubernetes</code></td>
+<td style="padding:0.4rem 0.6rem">A remote/cluster BuildKit instance</td>
+<td style="padding:0.4rem 0.6rem">No &mdash; needs <code>--load</code> or <code>--push</code></td>
+<td style="padding:0.4rem 0.6rem">Yes</td>
+</tr>
+</tbody>
+</table>
+
+<h2><code>--load</code> and multi-platform: it depends on your image store</h2>
+<p>Docker Engine 29+/Docker Desktop can use one of two local image stores. Check yours:</p>
+<pre>docker info --format '{{.DriverStatus}}'</pre>
+<div class="stage-box">
+<span class="label">containerd image store</span>
+<p style="margin:0.2rem 0">Shows <code>io.containerd.snapshotter.v1</code> in the output above. <code>--load</code> works even for multi-platform builds &mdash; the result is stored as one OCI index containing every platform variant. Run <code>docker image ls --tree</code> to see them broken out per-platform.</p>
+</div>
+<div class="stage-box">
+<span class="label">classic image store</span>
+<p style="margin:0.2rem 0">Older engines. <code>--load</code> only accepts a <em>single</em> platform &mdash; a multi-platform <code>--load</code> fails. Use <code>--push</code> to a registry instead; the registry assembles the manifest list, and nothing needs to live locally.</p>
+</div>
+
+<h2>Quick decision guide</h2>
+<ul>
+<li><strong>Just want to prove a multi-platform build works, don't need the image?</strong> No flag. It builds, stays in the build cache, and gets discarded (or reused as cache for your next build).</li>
+<li><strong>Want to run/inspect the image locally?</strong> Add <code>--load</code>. Fails on classic image store for multi-platform &mdash; check <code>docker info</code> first.</li>
+<li><strong>Want to ship it somewhere else / keep it permanently?</strong> Add <code>--push</code> with a registry-qualified <code>-t</code> (e.g. <code>docker.io/&lt;user&gt;/name:tag</code>). Needs <code>docker login</code> first.</li>
+</ul>
+
+<h2>Inspecting what you built</h2>
+<table style="width:100%; border-collapse:collapse; margin:1rem 0; font-size:0.9em">
+<thead>
+<tr style="border-bottom:1px solid var(--rule); text-align:left">
+<th style="padding:0.4rem 0.6rem">Where the image is</th>
+<th style="padding:0.4rem 0.6rem">Command to inspect it</th>
+</tr>
+</thead>
+<tbody>
+<tr style="border-bottom:1px solid var(--rule)">
+<td style="padding:0.4rem 0.6rem">Local, after <code>--load</code></td>
+<td style="padding:0.4rem 0.6rem"><code>docker image ls --tree</code></td>
+</tr>
+<tr style="border-bottom:1px solid var(--rule)">
+<td style="padding:0.4rem 0.6rem">Registry, after <code>--push</code></td>
+<td style="padding:0.4rem 0.6rem"><code>docker buildx imagetools inspect &lt;registry-ref&gt;</code></td>
+</tr>
+<tr>
+<td style="padding:0.4rem 0.6rem">Still only in build cache (no flag)</td>
+<td style="padding:0.4rem 0.6rem"><code>docker buildx du --builder &lt;name&gt;</code> (shows cache entries, not a runnable image)</td>
+</tr>
+</tbody>
+</table>
+<p><code>docker buildx imagetools inspect</code> only works against a registry reference &mdash; pointing it at a local-only tag like <code>local/foo:bar</code> fails with a misleading "pull access denied," because it assumes the name is a registry path.</p>
+
+<h2>Cleaning up build cache</h2>
+<pre>docker buildx du --builder &lt;name&gt;      # see what's cached
+docker buildx prune --builder &lt;name&gt;   # remove reclaimable cache (asks to confirm)
+docker buildx prune --builder &lt;name&gt; -a -f   # remove everything, no confirm</pre>
+
+<h2>Primary sources</h2>
+<p><a href="https://docs.docker.com/build/builders/drivers/docker-container/" target="_blank" rel="noopener">docs.docker.com/build/builders/drivers/docker-container</a> &middot;
+<a href="https://docs.docker.com/build/building/multi-platform/" target="_blank" rel="noopener">docs.docker.com/build/building/multi-platform</a></p>
+
+<hr>
+<p class="meta">Referenced from <a href="../lessons/0003-create-a-local-multiarch-builder.html">Lesson 0003</a> &middot; <a href="../GLOSSARY.md">GLOSSARY.md</a></p>
+
+</main>
+</body>
+</html>
