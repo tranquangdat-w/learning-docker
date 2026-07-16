@@ -26,6 +26,19 @@
 - [Docker Docs: BuildKit](https://docs.docker.com/build/buildkit/)
   Background on the BuildKit engine buildx talks to, and its cache model (layer cache, cache invalidation on the first changed instruction).
 
+## Knowledge — Docker Compose
+
+- [Docker Docs: Compose Quickstart](https://docs.docker.com/compose/gettingstarted/)
+  Walks the *same* Flask + Redis counter app as `ddd-book/multi-container`. Use for: the canonical wording behind Lesson 0004, and the first hands-on `up`/`down` loop.
+- [Docker Docs: How Compose works](https://docs.docker.com/compose/intro/features-uses/)
+  The mental model — declarative app definition, the project concept, why one file. Use for: framing *why* Compose exists after the Dockerfile track.
+- [Docker Docs: Compose file reference — services](https://docs.docker.com/reference/compose-file/services/)
+  Exhaustive list of every per-service key (`build`, `image`, `ports`, `volumes`, `depends_on`, …). Use for: exact syntax when writing a `compose.yaml` from scratch.
+- [Docker Docs: Networking in Compose](https://docs.docker.com/compose/how-tos/networking/)
+  How the default network and service-name DNS work. Use for: the service-discovery deep dive (next lesson after 0004).
+- [Book: _Docker Deep Dive_ — Nigel Poulton (Ch. 9)](https://www.nigelpoulton.com/books/docker-deep-dive/)
+  The chapter this `multi-container` app was written for. Use for: the guided book walkthrough of this exact app.
+
 ## Wisdom (Communities)
 
 - [Docker Community Slack (#buildkit channel)](https://dockr.ly/comm-slack)

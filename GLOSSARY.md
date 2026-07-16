@@ -73,3 +73,29 @@ _Avoid_: upload flag, publish flag
 **Build cache (BuildKit)**:
 Intermediate, unnamed results BuildKit keeps for each instruction it runs, stored inside the builder itself (e.g. the `docker-container` builder's own container). If a build specifies neither `--load` nor `--push`, the result *only* exists here — not as a runnable image, not visible to `docker image ls`. Only useful for speeding up the next build with matching steps (`CACHED` in the build log). Inspect with `docker buildx du`, clear with `docker buildx prune`.
 _Avoid_: image cache (imprecise — it's not a store of images, it's per-instruction build state)
+
+## Docker Compose
+
+**Compose file**:
+A `compose.yaml` (or `docker-compose.yml`) that *declares* a whole multi-service app — its services, networks, and volumes — in one file. A Dockerfile describes one image; a Compose file describes a running app made of several containers.
+_Avoid_: config file, docker file (that's a Dockerfile — a different thing)
+
+**Service**:
+One component of a Compose app, defined under the `services:` key (e.g. `web-fe`, `redis`). Each service produces one or more containers from a single image. The service's *name* also acts as its network hostname.
+_Avoid_: container (a service can run several), microservice, app
+
+**`docker compose up` / `down`**:
+`up` reads the Compose file and makes reality match it — builds/pulls images, creates the network and volumes, and starts every service. `down` stops and removes the containers and network (add `-v` to also remove named volumes). Modern Docker uses `docker compose` (space); the legacy standalone binary was `docker-compose` (hyphen).
+_Avoid_: docker-compose (the hyphenated form is the old v1 binary), start/stop (those act on existing containers, not the whole declared app)
+
+**Service discovery**:
+Compose runs an internal DNS on the app's network that resolves each service *name* to that service's container(s). This is why `app.py` can connect to `host='redis'` — the string is the service name, not an IP.
+_Avoid_: DNS lookup (too generic), linking (that's the deprecated `--link` mechanism this replaced)
+
+**Published vs target port**:
+In a `ports:` entry, `target` is the port *inside* the container (what the app listens on); `published` is the port on the *host* machine (what you connect to). Short form `"5001:8080"` is `published:target`.
+_Avoid_: internal/external port (imprecise), port forwarding
+
+**Named volume**:
+Persistent storage declared under the top-level `volumes:` key and mounted into a service (`source` → `target`). It outlives the container, so data (e.g. Redis' counter) survives restarts and `docker compose down`.
+_Avoid_: bind mount (that maps a host *path* — a different volume type), disk, storage

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reference — Compose File Anatomy</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<h1>Compose File Anatomy</h1>
+<p class="subtitle">Quick reference &middot; top-level keys, per-service keys, and the app lifecycle</p>
+
+<h2>Top-level keys</h2>
+<p>A <code>compose.yaml</code> has a small set of top-level keys. Each declares a kind of thing the app is made of.</p>
+<div class="stage-box">
+<span class="label">services:</span>
+<p style="margin:0.2rem 0">The containers. Each child key is one <strong>service</strong>; its name doubles as the network hostname. Required.</p>
+</div>
+<div class="stage-box">
+<span class="label">networks:</span>
+<p style="margin:0.2rem 0">Named virtual networks the services join. Omit it and Compose still makes a <code>default</code> network all services share.</p>
+</div>
+<div class="stage-box">
+<span class="label">volumes:</span>
+<p style="margin:0.2rem 0">Named, persistent storage that outlives containers. Declared here, then mounted per service.</p>
+</div>
+
+<h2>Common per-service keys</h2>
+<table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+<tbody>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>image:</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);">Use a published image (e.g. <code>redis:alpine</code>).</td></tr>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>build:</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);">Build the image from a Dockerfile. Value is the build context (e.g. <code>.</code>).</td></tr>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>ports:</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>published</code> (host) &rarr; <code>target</code> (in container). Short form: <code>"5001:8080"</code>.</td></tr>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>networks:</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);">Which declared networks this service joins.</td></tr>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>volumes:</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>source</code> (named volume) &rarr; <code>target</code> (path in container).</td></tr>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>environment:</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);">Env vars passed into the container.</td></tr>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>depends_on:</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);">Start ordering only &mdash; does <em>not</em> wait for the dependency to be ready.</td></tr>
+<tr><td style="padding:0.4rem 0.6rem;"><code>command:</code></td><td style="padding:0.4rem 0.6rem;">Override the process the container runs.</td></tr>
+</tbody>
+</table>
+
+<h2>Service discovery (the key idea)</h2>
+<div class="callout">
+<p>On a shared network, the <strong>service name is the hostname</strong>. A service named <code>redis</code> is reachable from other services at <code>redis:6379</code>. Never hard-code container IPs.</p>
+</div>
+
+<h2>Lifecycle commands</h2>
+<p>Run from the directory containing <code>compose.yaml</code>. Modern Docker uses the <code>docker compose</code> subcommand (space, not the old <code>docker-compose</code> hyphen).</p>
+<table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+<tbody>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>docker compose up</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);">Build/pull, create, and start everything (attached to logs).</td></tr>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>docker compose up -d</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);">Same, but detached (runs in the background).</td></tr>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>docker compose ps</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);">List this app's running services.</td></tr>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>docker compose logs -f web-fe</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);">Follow the logs of one service.</td></tr>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>docker compose config</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);">Print the fully-resolved file (great for catching YAML mistakes).</td></tr>
+<tr><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);"><code>docker compose down</code></td><td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--rule);">Stop and remove containers + networks. Add <code>-v</code> to also drop named volumes.</td></tr>
+<tr><td style="padding:0.4rem 0.6rem;"><code>docker compose build</code></td><td style="padding:0.4rem 0.6rem;">Rebuild images without starting.</td></tr>
+</tbody>
+</table>
+
+<p class="meta">Companion to <a href="../lessons/0004-compose-anatomy-and-up.html">Lesson 0004</a>. Verified against Docker Compose v5.3.1.</p>
+
+</main>
+</body>
+</html>

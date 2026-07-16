@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 0004 — Read a Compose File and Bring the App Up</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<main>
+
+<h1>Read a Compose File and Bring the App Up</h1>
+<p class="subtitle">Lesson 0004 &middot; one file, two services, one command &mdash; and why the app finds Redis by name</p>
+
+<h2>The problem Compose solves</h2>
+<p>You already know how to build <em>one</em> image and run <em>one</em> container. But the app in <code>ddd-book/multi-container</code> is really <strong>two</strong> containers that must run together: a Flask web front end and a Redis data store. By hand that means two <code>docker build</code>/<code>docker run</code> commands, a network you create yourself, and a volume you wire up &mdash; every time, in the right order.</p>
+<p>A <strong>Compose file</strong> replaces all of that. It <em>declares</em> the whole application &mdash; every service, network, and volume &mdash; in one <code>compose.yaml</code>. One command reads it and makes reality match the file. This is the same declarative idea as a Dockerfile, but one level up: a Dockerfile describes one image; a Compose file describes a running multi-service app.</p>
+
+<h2>The anatomy of <code>compose.yaml</code></h2>
+<p>Here is the file you already have, trimmed to what matters:</p>
+<pre>networks:
+  counter-net:
+volumes:
+  counter-vol:
+
+services:
+  web-fe:
+    build: .
+    command: python app/app.py
+    ports:
+      - target: 8080
+        published: 5001
+    networks:
+      - counter-net
+  redis:
+    image: redis:alpine
+    networks:
+      - counter-net
+    volumes:
+      - type: volume
+        source: counter-vol
+        target: /data</pre>
+
+<p>Three top-level keys declare the pieces of the app. Read them as <em>nouns</em> &mdash; things that will exist once the app is up:</p>
+
+<div class="stage-box">
+<span class="label">services:</span>
+<p style="margin:0.2rem 0">The containers that make up the app. Each key under it (<code>web-fe</code>, <code>redis</code>) is one <strong>service</strong>. The name you choose here matters &mdash; hold that thought for the next section.</p>
+</div>
+<div class="stage-box">
+<span class="label">networks:</span>
+<p style="margin:0.2rem 0">A private virtual network Compose creates for the app. Both services join <code>counter-net</code>, which is what lets them talk to each other while staying isolated from everything else on your machine.</p>
+</div>
+<div class="stage-box">
+<span class="label">volumes:</span>
+<p style="margin:0.2rem 0">Named, persistent storage that outlives the container. <code>counter-vol</code> is mounted into Redis at <code>/data</code>, so the visit counter survives a restart.</p>
+</div>
+
+<p>Now the two services. The key difference between them ties straight back to what you already know about images:</p>
+
+<div class="stage-box">
+<span class="label">web-fe &rarr; build: .</span>
+<p style="margin:0.2rem 0">This service has no ready-made image, so Compose <strong>builds one</strong> from the <code>Dockerfile</code> in <code>.</code> (the build context you learned about earlier). This is your multi-stage/Dockerfile knowledge plugged straight into Compose.</p>
+</div>
+<div class="stage-box">
+<span class="label">redis &rarr; image: redis:alpine</span>
+<p style="margin:0.2rem 0">This service <strong>pulls a published image</strong> from a registry instead of building. <code>build:</code> and <code>image:</code> are the two ways a service gets its image &mdash; build your own, or use someone else's.</p>
+</div>
+<div class="stage-box">
+<span class="label">ports: target 8080 / published 5001</span>
+<p style="margin:0.2rem 0"><code>target</code> is the port <em>inside</em> the container (the Flask app listens on 8080). <code>published</code> is the port on <em>your machine</em>. So you build for 8080 but visit <code>localhost:5001</code>. Only <code>web-fe</code> publishes a port; Redis stays reachable only inside the network.</p>
+</div>
+
+<h2>The aha: services find each other by name</h2>
+<p>Open <code>app/app.py</code> and look at line&nbsp;6:</p>
+<pre>cache = redis.Redis(host='redis', port=6379)</pre>
+<p>The host is the literal string <code>'redis'</code> &mdash; not an IP address, not <code>localhost</code>. That works because Compose runs an internal DNS on <code>counter-net</code> that resolves every <strong>service name</strong> to that service's container. The <code>redis</code> service is reachable at the hostname <code>redis</code>; if the service were named <code>db</code>, the code would say <code>host='db'</code>.</p>
+<div class="callout">
+<p><strong>This is service discovery.</strong> The service name in <code>compose.yaml</code> <em>is</em> the network hostname. It's the single biggest reason Compose feels like magic &mdash; you never hard-code container IPs.</p>
+</div>
+
+<h2>Bring it up</h2>
+<p>From inside <code>ddd-book/multi-container</code>, one command builds what needs building, pulls what needs pulling, creates the network and volume, and starts both services:</p>
+<pre>docker compose up</pre>
+<p>Watch the log: you'll see <code>web-fe</code> and <code>redis</code> start, interleaved. Then open <a href="http://localhost:5001" target="_blank" rel="noopener">http://localhost:5001</a> &mdash; every refresh increments the counter, which the Flask service is reading from Redis <em>over the network you just declared</em>. Stop it with <kbd>Ctrl-C</kbd>, then tear the whole app down cleanly:</p>
+<pre>docker compose down</pre>
+<div class="callout">
+<p><strong>Verify it yourself.</strong> Before you open the browser, run <code>docker compose ps</code> in another terminal to see both services listed, and <code>docker compose logs redis</code> to watch Redis alone. Reading the real output is how this workspace checks claims &mdash; don't take the log's word for it, look.</p>
+</div>
+
+<h2>Check yourself</h2>
+
+<div class="quiz" id="quiz">
+  <div class="q">1. On the shared network, what does the Flask app use as the Redis hostname?</div>
+  <ul>
+    <li><button data-correct="true">the service name</button></li>
+    <li><button>the volume name</button></li>
+    <li><button>the network name</button></li>
+    <li><button>the driver name</button></li>
+  </ul>
+  <div class="feedback"></div>
+</div>
+
+<div class="quiz" id="quiz2">
+  <div class="q">2. Which single command builds, creates, and starts every service?</div>
+  <ul>
+    <li><button data-correct="true">docker compose up</button></li>
+    <li><button>docker compose run</button></li>
+    <li><button>docker compose add</button></li>
+    <li><button>docker compose get</button></li>
+  </ul>
+  <div class="feedback"></div>
+</div>
+
+<div class="quiz" id="quiz3">
+  <div class="q">3. With <code>published: 5001</code> and <code>target: 8080</code>, which port do you open in your browser?</div>
+  <ul>
+    <li><button data-correct="true">5001</button></li>
+    <li><button>8080</button></li>
+    <li><button>6379</button></li>
+    <li><button>3000</button></li>
+  </ul>
+  <div class="feedback"></div>
+</div>
+
+<hr>
+
+<h2>Read this next</h2>
+<p><strong>Primary source:</strong> <a href="https://docs.docker.com/compose/gettingstarted/" target="_blank" rel="noopener">Docker Docs — Compose Quickstart</a>. It walks the <em>same</em> Flask + Redis counter app you just ran, so it reinforces every term above with the canonical wording. Read it once, end to end.</p>
+<p><strong>Keep handy:</strong> the <a href="../reference/compose-file-anatomy.html">Compose file anatomy</a> cheat sheet, and the shared <a href="../GLOSSARY.md">glossary</a> for exact terms.</p>
+
+<p class="meta">I'm your teacher for this &mdash; ask me followup questions about anything above. Good next ones: &ldquo;what actually happens on the network when <code>web-fe</code> resolves <code>redis</code>?&rdquo;, &ldquo;how is a Compose <em>service</em> different from a container?&rdquo;, or &ldquo;why does <code>redis</code> not need a <code>ports:</code> entry?&rdquo;</p>
+
+</main>
+
+<script>
+document.querySelectorAll('.quiz').forEach(function (quiz) {
+  var fb = quiz.querySelector('.feedback');
+  quiz.querySelectorAll('button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var correct = btn.dataset.correct === 'true';
+      quiz.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+      btn.classList.add(correct ? 'correct' : 'wrong');
+      if (correct) {
+        fb.textContent = 'Correct.';
+        fb.className = 'feedback ok';
+      } else {
+        fb.textContent = 'Not quite — try to recall it, then check the lesson.';
+        fb.className = 'feedback no';
+        quiz.querySelector('button[data-correct="true"]').classList.add('correct');
+      }
+    });
+  });
+});
+</script>
+</body>
+</html>
